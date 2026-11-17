@@ -5,6 +5,7 @@ from .models import (
     JenisPembayaran,
     KasKeluar,
     Pembayaran,
+    PemasukanNonSiswa,
     Semester,
     Siswa,
     Tagihan,
@@ -449,3 +450,40 @@ class KasKeluarForm(forms.ModelForm):
         cleaned_data['allocation_rows'] = allocation_rows
         cleaned_data['total_alokasi'] = total_alokasi
         return cleaned_data
+
+
+class PemasukanNonSiswaForm(forms.ModelForm):
+    class Meta:
+        model = PemasukanNonSiswa
+        fields = ['judul', 'kategori', 'jumlah', 'tanggal_pemasukan', 'semester', 'keterangan']
+        widgets = {
+            'tanggal_pemasukan': forms.DateInput(attrs={'type': 'date'}),
+            'keterangan': forms.Textarea(attrs={'rows': 4}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        active_semester = Semester.objects.filter(aktif=True).first()
+        self.fields['judul'].widget.attrs.update({
+            'placeholder': 'Contoh: Donasi kegiatan madrasah',
+        })
+        self.fields['kategori'].widget.attrs.update({
+            'placeholder': 'Contoh: Donasi, bantuan, hasil usaha',
+        })
+        self.fields['jumlah'].widget.attrs.update(
+            currency_input_attrs(placeholder='Masukkan nominal tanpa titik atau koma')
+        )
+        self.fields['semester'].queryset = Semester.objects.all().order_by('-tanggal_mulai')
+        self.fields['semester'].required = False
+        self.fields['semester'].widget.attrs.update({
+            'data-searchable': 'true',
+            'data-search-placeholder': 'Cari semester',
+        })
+        if active_semester:
+            self.fields['semester'].initial = active_semester
+
+    def clean_jumlah(self):
+        jumlah = self.cleaned_data.get('jumlah')
+        if jumlah is None or jumlah <= 0:
+            raise forms.ValidationError('Jumlah pemasukan harus lebih dari 0.')
+        return jumlah

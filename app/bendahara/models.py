@@ -286,3 +286,36 @@ class KasKeluarAlokasi(models.Model):
                 name='unique_alokasi_per_jenis_pengeluaran',
             ),
         ]
+
+
+class PemasukanNonSiswa(models.Model):
+    kode_pemasukan = models.CharField(max_length=32, unique=True, blank=True)
+    judul = models.CharField(max_length=150)
+    kategori = models.CharField(max_length=100)
+    jumlah = models.IntegerField()
+    tanggal_pemasukan = models.DateField(default=timezone.localdate)
+    semester = models.ForeignKey(
+        Semester,
+        on_delete=models.SET_NULL,
+        related_name='pemasukan_non_siswa_set',
+        blank=True,
+        null=True,
+    )
+    keterangan = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+
+        if is_new and not self.kode_pemasukan:
+            self.kode_pemasukan = f"PN-{self.tanggal_pemasukan.strftime('%Y%m%d')}-{self.pk:04d}"
+            super().save(update_fields=['kode_pemasukan'])
+
+    def __str__(self):
+        return self.kode_pemasukan or f"Pemasukan Non-Siswa #{self.pk}"
+
+    class Meta:
+        ordering = ['-tanggal_pemasukan', '-id']
+        verbose_name = 'Pemasukan Non-Siswa'
+        verbose_name_plural = 'Pemasukan Non-Siswa'

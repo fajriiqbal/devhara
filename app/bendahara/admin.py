@@ -1,5 +1,15 @@
 from django.contrib import admin
-from .models import Semester, Siswa, JenisPembayaran, Tagihan, Pembayaran, TransaksiPembayaran, KasKeluar, KasKeluarAlokasi
+from .models import (
+    JenisPembayaran,
+    KasKeluar,
+    KasKeluarAlokasi,
+    Pembayaran,
+    PemasukanNonSiswa,
+    Semester,
+    Siswa,
+    Tagihan,
+    TransaksiPembayaran,
+)
 
 
 @admin.register(Semester)
@@ -64,3 +74,11 @@ class KasKeluarAlokasiAdmin(admin.ModelAdmin):
     list_display = ('kas_keluar', 'jenis_pembayaran', 'nominal')
     list_filter = ('jenis_pembayaran',)
     search_fields = ('kas_keluar__kode_pengeluaran', 'kas_keluar__judul', 'jenis_pembayaran__nama')
+
+
+@admin.register(PemasukanNonSiswa)
+class PemasukanNonSiswaAdmin(admin.ModelAdmin):
+    list_display = ('kode_pemasukan', 'judul', 'kategori', 'jumlah', 'tanggal_pemasukan', 'semester')
+    list_filter = ('tanggal_pemasukan', 'semester', 'kategori')
+    search_fields = ('kode_pemasukan', 'judul', 'kategori', 'keterangan')
+    date_hierarchy = 'tanggal_pemasukan'

@@ -1,0 +1,144 @@
+{% extends 'bendahara/base.html' %}
+{% load humanize %}
+
+{% block title %}Pemasukan Non-Siswa{% endblock %}
+{% block page_title %}Pemasukan Non-Siswa{% endblock %}
+{% block page_subtitle %}Catat pemasukan sekolah yang tidak berasal dari tagihan atau pembayaran siswa.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <div class="panel-card rounded-3xl p-6">
+            <div class="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Kas Masuk</div>
+            <h3 class="mt-3 text-xl font-semibold text-slate-900">Pemasukan di luar siswa</h3>
+            <p class="mt-2 text-sm leading-7 text-slate-500">
+                Catatan di halaman ini berdiri terpisah dari pembayaran siswa, tetapi ikut dihitung ke saldo aktual
+                Kas Sekolah dan dashboard. Pemasukan ini tidak mengubah tagihan maupun tunggakan siswa.
+            </p>
+        </div>
+
+        <div class="panel-card rounded-3xl bg-[linear-gradient(135deg,rgba(16,185,129,0.08),rgba(37,99,235,0.08))] p-6">
+            <div class="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Ringkasan</div>
+            <div class="mt-3 text-sm text-slate-500">
+                {% if current_semester %}Semester {{ current_semester.nama }}{% else %}Semua semester{% endif %}
+            </div>
+            <div class="mt-1 text-2xl font-bold text-emerald-700">Rp {{ total_pemasukan|intcomma }}</div>
+            <div class="mt-3 text-sm text-slate-500">
+                Total keseluruhan: <span class="font-semibold text-slate-700">Rp {{ total_pemasukan_keseluruhan|intcomma }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-card rounded-3xl p-6">
+        <div class="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+                <div class="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Pencatatan</div>
+                <h3 class="mt-2 text-lg font-semibold text-slate-900">
+                    {% if editing_item %}Edit Pemasukan{% else %}Input Pemasukan Baru{% endif %}
+                </h3>
+            </div>
+            {% if editing_item %}
+                <a href="{% url 'bendahara:pemasukan_non_siswa' %}{% if current_semester %}?semester={{ current_semester.id }}{% endif %}" class="btn-muted">
+                    Batal Edit
+                </a>
+            {% endif %}
+        </div>
+
+        <form method="post" class="mt-5 space-y-5">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    {{ form.non_field_errors }}
+                </div>
+            {% endif %}
+
+            <div class="grid gap-5 md:grid-cols-2">
+                {% for field in form %}
+                    <div class="{% if field.name == 'keterangan' %}md:col-span-2{% endif %}">
+                        <label for="{{ field.id_for_label }}" class="mb-2 block text-sm font-medium text-slate-700">
+                            {{ field.label }}
+                        </label>
+                        {{ field }}
+                        {% if field.errors %}
+                            <p class="mt-2 text-sm text-red-600">{{ field.errors|striptags }}</p>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="flex flex-wrap gap-3 border-t border-slate-200 pt-5">
+                <button type="submit" class="btn-primary">
+                    {% if editing_item %}Simpan Perubahan{% else %}Simpan Pemasukan{% endif %}
+                </button>
+                <a href="{% url 'bendahara:kas_sekolah' %}{% if current_semester %}?semester={{ current_semester.id }}{% endif %}" class="btn-muted">
+                    Lihat Kas Sekolah
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <div class="panel-card overflow-hidden rounded-3xl">
+        <div class="flex flex-col gap-4 border-b border-slate-200/80 px-6 py-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <h3 class="text-lg font-semibold text-slate-900">Riwayat Pemasukan Non-Siswa</h3>
+                <p class="mt-1 text-sm text-slate-500">
+                    {% if current_semester %}Data semester {{ current_semester.nama }}.{% else %}Data semua semester.{% endif %}
+                </p>
+            </div>
+            <form method="get" class="flex flex-wrap items-end gap-3">
+                <div>
+                    <label for="semester-filter" class="mb-1 block text-sm text-slate-600">Semester</label>
+                    <select id="semester-filter" name="semester" class="rounded-xl border-slate-300">
+                        {% for semester in semester_list %}
+                            <option value="{{ semester.id }}" {% if current_semester and current_semester.id == semester.id %}selected{% endif %}>
+                                {{ semester.nama }}{% if semester.aktif %} (Aktif){% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn-secondary">Tampilkan</button>
+            </form>
+        </div>
+
+        <div class="overflow-x-auto data-table">
+            <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50/80">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase text-slate-600">Tanggal</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase text-slate-600">Kode</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase text-slate-600">Judul / Kategori</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase text-slate-600">Semester</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase text-slate-600">Jumlah</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase text-slate-600">Keterangan</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase text-slate-600">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 bg-white">
+                    {% for item in pemasukan_items %}
+                        <tr class="hover:bg-emerald-50/40">
+                            <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-700">{{ item.tanggal_pemasukan|date:"d M Y" }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 text-sm font-semibold text-slate-900">{{ item.kode_pemasukan }}</td>
+                            <td class="px-6 py-4">
+                                <div class="text-sm font-semibold text-slate-900">{{ item.judul }}</div>
+                                <div class="text-xs text-slate-500">{{ item.kategori }}</div>
+                            </td>
+                            <td class="px-6 py-4 text-sm text-slate-700">{{ item.semester.nama|default:"Tanpa semester" }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 text-sm font-semibold text-emerald-700">Rp {{ item.jumlah|intcomma }}</td>
+                            <td class="px-6 py-4 text-sm text-slate-600">{{ item.keterangan|default:"-" }}</td>
+                            <td class="px-6 py-4">
+                                <a href="{% url 'bendahara:pemasukan_non_siswa_update' item.pk %}{% if current_semester %}?semester={{ current_semester.id }}{% endif %}" class="inline-flex items-center rounded-xl bg-amber-500 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600">
+                                    Edit
+                                </a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="px-6 py-8 text-center text-slate-500">Belum ada pemasukan non-siswa pada semester ini.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

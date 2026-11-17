@@ -13,10 +13,21 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.utils.timezone import localdate
 
-from .models import Semester, Siswa, JenisPembayaran, Tagihan, Pembayaran, TransaksiPembayaran, KasKeluar, KasKeluarAlokasi
+from .models import (
+    JenisPembayaran,
+    KasKeluar,
+    KasKeluarAlokasi,
+    Pembayaran,
+    PemasukanNonSiswa,
+    Semester,
+    Siswa,
+    Tagihan,
+    TransaksiPembayaran,
+)
 from .forms import (
     SiswaForm, JenisPembayaranForm, PembayaranMultiForm,
-    SemesterForm, BulkTagihanForm, KasKeluarForm, PembayaranEditForm
+    SemesterForm, BulkTagihanForm, KasKeluarForm, PembayaranEditForm,
+    PemasukanNonSiswaForm,
 )
 
 MONTH_NAMES_ID = [
@@ -600,13 +611,19 @@ def build_kas_sekolah_page_context(*, form, selected_semester, editing_item=None
         .prefetch_related('alokasi_set__jenis_pembayaran')
         .order_by('-tanggal_pengeluaran', '-id')
     )
+    pemasukan_non_siswa_queryset = (
+        PemasukanNonSiswa.objects.select_related('semester')
+        .order_by('-tanggal_pemasukan', '-id')
+    )
 
     if selected_semester:
         pembayaran_queryset = pembayaran_queryset.filter(tagihan__semester=selected_semester)
         kas_keluar_queryset = kas_keluar_queryset.filter(semester=selected_semester)
+        pemasukan_non_siswa_queryset = pemasukan_non_siswa_queryset.filter(semester=selected_semester)
 
     pembayaran_items = list(pembayaran_queryset)
     kas_keluar_items = list(kas_keluar_queryset)
+    pemasukan_non_siswa_items = list(pemasukan_non_siswa_queryset[:6])
     kas_keluar_rows = build_kas_keluar_display_rows(kas_keluar_items)
     cash_position_filtered = get_cash_position_summary(selected_semester)
     cash_position_overall = get_cash_position_summary()
@@ -675,6 +692,9 @@ def build_kas_sekolah_page_context(*, form, selected_semester, editing_item=None
     total_kas_masuk_hari_ini = sum(
         item.jumlah_bayar for item in pembayaran_items if item.tanggal_bayar.date() == localdate()
     )
+    total_kas_masuk_hari_ini += pemasukan_non_siswa_queryset.filter(
+        tanggal_pemasukan=localdate()
+    ).aggregate(total=Coalesce(Sum('jumlah'), 0))['total']
     total_kas_keluar_hari_ini = sum(
         item.jumlah for item in kas_keluar_items if item.tanggal_pengeluaran == localdate()
     )
@@ -688,11 +708,13 @@ def build_kas_sekolah_page_context(*, form, selected_semester, editing_item=None
         'current_semester': selected_semester,
         'total_target_masuk': cash_position_filtered['total_target_masuk'],
         'total_realisasi_masuk': cash_position_filtered['total_realisasi_masuk'],
+        'total_pemasukan_non_siswa': cash_position_filtered['total_pemasukan_non_siswa'],
         'total_pengeluaran': cash_position_filtered['total_pengeluaran'],
         'saldo_aktual': cash_position_filtered['saldo_aktual'],
         'sisa_target_belum_masuk': cash_position_filtered['sisa_target_belum_masuk'],
         'total_target_masuk_keseluruhan': cash_position_overall['total_target_masuk'],
         'total_realisasi_masuk_keseluruhan': cash_position_overall['total_realisasi_masuk'],
+        'total_pemasukan_non_siswa_keseluruhan': cash_position_overall['total_pemasukan_non_siswa'],
         'total_pengeluaran_keseluruhan': cash_position_overall['total_pengeluaran'],
         'saldo_aktual_keseluruhan': cash_position_overall['saldo_aktual'],
         'sisa_target_belum_masuk_keseluruhan': cash_position_overall['sisa_target_belum_masuk'],
@@ -703,8 +725,31 @@ def build_kas_sekolah_page_context(*, form, selected_semester, editing_item=None
         'pembayaran_items': pembayaran_items,
         'kas_keluar_items': kas_keluar_items,
         'kas_keluar_rows': kas_keluar_rows,
+        'pemasukan_non_siswa_items': pemasukan_non_siswa_items,
+        'jumlah_pemasukan_non_siswa': pemasukan_non_siswa_queryset.count(),
         'kategori_summary': kategori_summary[:6],
         'jenis_keuangan_rows': jenis_keuangan_rows[:8],
+    }
+
+
+def build_pemasukan_non_siswa_page_context(*, form, selected_semester, editing_item=None):
+    pemasukan_queryset = PemasukanNonSiswa.objects.select_related('semester').order_by(
+        '-tanggal_pemasukan',
+        '-id',
+    )
+    if selected_semester:
+        pemasukan_queryset = pemasukan_queryset.filter(semester=selected_semester)
+
+    return {
+        'form': form,
+        'editing_item': editing_item,
+        'semester_list': Semester.objects.all(),
+        'current_semester': selected_semester,
+        'pemasukan_items': list(pemasukan_queryset),
+        'total_pemasukan': sum(item.jumlah for item in pemasukan_queryset),
+        'total_pemasukan_keseluruhan': sum(
+            item.jumlah for item in PemasukanNonSiswa.objects.all()
+        ),
     }
 
 
@@ -867,13 +912,18 @@ def get_report_export_format(request):
 
 def get_kas_summary(semester=None):
     pembayaran_queryset = Pembayaran.objects.select_related('tagihan__semester')
+    pemasukan_non_siswa_queryset = PemasukanNonSiswa.objects.all()
     kas_keluar_queryset = KasKeluar.objects.select_related('semester')
 
     if semester:
         pembayaran_queryset = pembayaran_queryset.filter(tagihan__semester=semester)
+        pemasukan_non_siswa_queryset = pemasukan_non_siswa_queryset.filter(semester=semester)
         kas_keluar_queryset = kas_keluar_queryset.filter(semester=semester)
 
-    total_kas_masuk = sum(item.jumlah_bayar for item in pembayaran_queryset)
+    total_kas_masuk = (
+        sum(item.jumlah_bayar for item in pembayaran_queryset)
+        + sum(item.jumlah for item in pemasukan_non_siswa_queryset)
+    )
     total_kas_keluar = sum(item.jumlah for item in kas_keluar_queryset)
     return {
         'total_kas_masuk': total_kas_masuk,
@@ -885,23 +935,28 @@ def get_kas_summary(semester=None):
 def get_cash_position_summary(semester=None):
     tagihan_queryset = Tagihan.objects.select_related('semester')
     pembayaran_queryset = Pembayaran.objects.select_related('tagihan__semester')
+    pemasukan_non_siswa_queryset = PemasukanNonSiswa.objects.all()
     kas_keluar_queryset = KasKeluar.objects.select_related('semester')
 
     if semester:
         tagihan_queryset = tagihan_queryset.filter(semester=semester)
         pembayaran_queryset = pembayaran_queryset.filter(tagihan__semester=semester)
+        pemasukan_non_siswa_queryset = pemasukan_non_siswa_queryset.filter(semester=semester)
         kas_keluar_queryset = kas_keluar_queryset.filter(semester=semester)
 
     total_target_masuk = sum(tagihan.nominal for tagihan in tagihan_queryset)
-    total_realisasi_masuk = sum(item.jumlah_bayar for item in pembayaran_queryset)
+    total_pembayaran_siswa = sum(item.jumlah_bayar for item in pembayaran_queryset)
+    total_pemasukan_non_siswa = sum(item.jumlah for item in pemasukan_non_siswa_queryset)
+    total_realisasi_masuk = total_pembayaran_siswa + total_pemasukan_non_siswa
     total_pengeluaran = sum(item.jumlah for item in kas_keluar_queryset)
 
     return {
         'total_target_masuk': total_target_masuk,
         'total_realisasi_masuk': total_realisasi_masuk,
+        'total_pemasukan_non_siswa': total_pemasukan_non_siswa,
         'total_pengeluaran': total_pengeluaran,
         'saldo_aktual': total_realisasi_masuk - total_pengeluaran,
-        'sisa_target_belum_masuk': max(total_target_masuk - total_realisasi_masuk, 0),
+        'sisa_target_belum_masuk': max(total_target_masuk - total_pembayaran_siswa, 0),
     }
 
 
@@ -1403,6 +1458,74 @@ def kas_keluar_update(request, pk):
         editing_item=kas_keluar,
     )
     return render(request, 'bendahara/kas_sekolah.html', context)
+
+
+def pemasukan_non_siswa(request):
+    current_semester = get_current_semester(
+        request,
+        source='POST' if request.method == 'POST' else 'GET',
+    )
+
+    if request.method == 'POST':
+        form = PemasukanNonSiswaForm(request.POST)
+        if form.is_valid():
+            pemasukan = form.save(commit=False)
+            if not pemasukan.semester and current_semester:
+                pemasukan.semester = current_semester
+            pemasukan.save()
+            messages.success(request, f"Pemasukan {pemasukan.kode_pemasukan} berhasil dicatat.")
+            url = redirect('bendahara:pemasukan_non_siswa')
+            if pemasukan.semester:
+                url['Location'] += f'?{semester_query_param(pemasukan.semester)}'
+            return url
+        messages.error(request, "Pemasukan belum tersimpan. Periksa kembali data Anda.")
+    else:
+        initial = {'semester': current_semester.pk} if current_semester else None
+        form = PemasukanNonSiswaForm(initial=initial)
+
+    context = build_pemasukan_non_siswa_page_context(
+        form=form,
+        selected_semester=current_semester,
+    )
+    return render(request, 'bendahara/pemasukan_non_siswa.html', context)
+
+
+def pemasukan_non_siswa_update(request, pk):
+    pemasukan = get_object_or_404(
+        PemasukanNonSiswa.objects.select_related('semester'),
+        pk=pk,
+    )
+    current_semester = get_current_semester(
+        request,
+        source='POST' if request.method == 'POST' else 'GET',
+    )
+    selected_semester = pemasukan.semester or current_semester
+
+    if request.method == 'POST':
+        form = PemasukanNonSiswaForm(request.POST, instance=pemasukan)
+        if form.is_valid():
+            updated_pemasukan = form.save(commit=False)
+            if not updated_pemasukan.semester and current_semester:
+                updated_pemasukan.semester = current_semester
+            updated_pemasukan.save()
+            messages.success(
+                request,
+                f"Pemasukan {updated_pemasukan.kode_pemasukan} berhasil diperbarui.",
+            )
+            url = redirect('bendahara:pemasukan_non_siswa')
+            if updated_pemasukan.semester:
+                url['Location'] += f'?{semester_query_param(updated_pemasukan.semester)}'
+            return url
+        messages.error(request, "Perubahan pemasukan belum tersimpan. Periksa kembali data Anda.")
+    else:
+        form = PemasukanNonSiswaForm(instance=pemasukan)
+
+    context = build_pemasukan_non_siswa_page_context(
+        form=form,
+        selected_semester=selected_semester,
+        editing_item=pemasukan,
+    )
+    return render(request, 'bendahara/pemasukan_non_siswa.html', context)
 
 
 # ================= SEMESTER =================

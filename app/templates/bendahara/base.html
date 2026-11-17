@@ -50,7 +50,7 @@
         html {
             scroll-behavior: smooth;
         }
-
+ 
         body {
             font-family: 'Manrope', sans-serif;
             background:
@@ -433,6 +433,13 @@
                             <span class="nav-label">Kas Sekolah</span>
                         </span>
                         <span class="text-[10px] text-slate-500">07</span>
+                    </a>
+
+                    <a href="{% url 'bendahara:pemasukan_non_siswa' %}" class="nav-link {% if 'pemasukan_non_siswa' in request.resolver_match.url_name %}nav-link-active{% endif %}">
+                        <span>
+                            <span class="nav-kicker">Kas Masuk</span>
+                            <span class="nav-label">Pemasukan Non-Siswa</span>
+                        </span>
                     </a>
 
                     <div class="px-3 pt-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
