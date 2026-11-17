@@ -116,3 +116,33 @@ class PemasukanNonSiswaTests(TestCase):
         self.assertEqual(cash_position['sisa_target_belum_masuk'], 800)
         self.assertEqual(kas_summary['total_kas_masuk'], 700)
         self.assertEqual(kas_summary['saldo_kas'], 600)
+
+
+class PembayaranReceiptTests(TestCase):
+    def test_receipt_endpoint_opens_printable_html_instead_of_download(self):
+        semester = Semester.objects.create(
+            nama='Ganjil 2026/2027',
+            tahun_ajaran='2026/2027',
+            semester='Ganjil',
+            tanggal_mulai=date(2026, 7, 1),
+            tanggal_selesai=date(2026, 12, 31),
+            aktif=True,
+        )
+        siswa = Siswa.objects.create(nis='PRINT-001', nama='Siswa Cetak', kelas='7A')
+        jenis = JenisPembayaran.objects.create(nama='SPP Cetak', nominal_default=1000)
+        tagihan = Tagihan.objects.create(
+            siswa=siswa,
+            jenis=jenis,
+            semester=semester,
+            nominal=1000,
+        )
+        pembayaran = Pembayaran.objects.create(tagihan=tagihan, jumlah_bayar=500)
+
+        response = self.client.get(
+            reverse('bendahara:pembayaran_download', args=[pembayaran.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('attachment', response.get('Content-Disposition', ''))
+        self.assertContains(response, 'window.print()')
+        self.assertContains(response, 'size: 80mm auto')

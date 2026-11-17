@@ -115,12 +115,12 @@
                                     Edit
                                 </a>
                                 {% if pembayaran.transaksi %}
-                                    <a href="{% url 'bendahara:transaksi_pembayaran_download' pembayaran.transaksi.pk %}" class="inline-flex items-center px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm">
-                                        Download Struk
+                                    <a href="{% url 'bendahara:transaksi_pembayaran_download' pembayaran.transaksi.pk %}" target="_blank" rel="noopener" class="inline-flex items-center px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm">
+                                        Cetak Struk
                                     </a>
                                 {% else %}
-                                    <a href="{% url 'bendahara:pembayaran_download' pembayaran.pk %}" class="inline-flex items-center px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm">
-                                        Download Kwitansi
+                                    <a href="{% url 'bendahara:pembayaran_download' pembayaran.pk %}" target="_blank" rel="noopener" class="inline-flex items-center px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm">
+                                        Cetak Kwitansi
                                     </a>
                                 {% endif %}
                             </div>

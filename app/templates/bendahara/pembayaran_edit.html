@@ -159,16 +159,16 @@
 
             <div class="panel-card rounded-3xl p-6">
                 <div class="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Bukti Pembayaran</div>
-                <h4 class="mt-3 text-lg font-semibold text-slate-900">Unduh Setelah Dicek</h4>
-                <p class="mt-2 text-sm text-slate-500">Sesudah perubahan disimpan, Anda bisa langsung unduh ulang bukti bayar dengan data terbaru.</p>
+                <h4 class="mt-3 text-lg font-semibold text-slate-900">Cetak Setelah Dicek</h4>
+                <p class="mt-2 text-sm text-slate-500">Sesudah perubahan disimpan, Anda bisa langsung mencetak bukti bayar dengan data terbaru.</p>
                 <div class="mt-5">
                     {% if pembayaran.transaksi %}
-                        <a href="{% url 'bendahara:transaksi_pembayaran_download' pembayaran.transaksi.pk %}" class="inline-flex items-center justify-center px-4 py-3 rounded-2xl bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm">
-                            Download Struk Gabungan
+                        <a href="{% url 'bendahara:transaksi_pembayaran_download' pembayaran.transaksi.pk %}" target="_blank" rel="noopener" class="inline-flex items-center justify-center px-4 py-3 rounded-2xl bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm">
+                            Cetak Struk Gabungan
                         </a>
                     {% else %}
-                        <a href="{% url 'bendahara:pembayaran_download' pembayaran.pk %}" class="inline-flex items-center justify-center px-4 py-3 rounded-2xl bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm">
-                            Download Kwitansi
+                        <a href="{% url 'bendahara:pembayaran_download' pembayaran.pk %}" target="_blank" rel="noopener" class="inline-flex items-center justify-center px-4 py-3 rounded-2xl bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm">
+                            Cetak Kwitansi
                         </a>
                     {% endif %}
                 </div>

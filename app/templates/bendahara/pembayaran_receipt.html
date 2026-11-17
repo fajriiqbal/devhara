@@ -135,12 +135,32 @@
             line-height: 1.6;
         }
 
+        @page {
+            size: 80mm auto;
+            margin: 0;
+        }
+
         @media print {
-            body { background: #ffffff; padding: 0; }
+            body {
+                width: 80mm;
+                background: #ffffff;
+                padding: 0;
+            }
+
             .receipt {
                 border: none;
                 width: 80mm;
+                max-width: none;
+                margin: 0;
                 padding: 8px 6px 12px;
+            }
+
+            .status-box,
+            .status-box.kurang-bayar,
+            .status-box.lunas {
+                background: #ffffff;
+                border-color: #111827;
+                color: #111827;
             }
         }
     </style>
@@ -282,5 +302,10 @@
             Nani Rizki Amalia, S.E.
         </div>
     </div>
+    <script>
+        window.addEventListener('load', function () {
+            window.print();
+        });
+    </script>
 </body>
 </html>

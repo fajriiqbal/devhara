@@ -1168,7 +1168,6 @@ def render_pembayaran_receipt_response(*, transaksi=None, pembayaran=None):
         keterangan = transaksi.keterangan
         total_bayar = sum(item.jumlah_bayar for item in payment_items)
         semester = transaksi.semester
-        filename = f'struk_{nomor_transaksi}.html'
     elif pembayaran is not None:
         payment_items = [pembayaran]
         siswa = pembayaran.tagihan.siswa
@@ -1178,7 +1177,6 @@ def render_pembayaran_receipt_response(*, transaksi=None, pembayaran=None):
         keterangan = pembayaran.keterangan
         total_bayar = pembayaran.jumlah_bayar
         semester = pembayaran.tagihan.semester
-        filename = f'kwitansi_pembayaran_{pembayaran.pk}.html'
     else:
         raise ValueError("transaksi atau pembayaran wajib disediakan")
 
@@ -1210,7 +1208,6 @@ def render_pembayaran_receipt_response(*, transaksi=None, pembayaran=None):
     })
 
     response = HttpResponse(html, content_type='text/html; charset=utf-8')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
 
