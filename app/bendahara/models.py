@@ -1,7 +1,7 @@
 import re
 
 from django.db import models
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -270,11 +270,17 @@ class KasKeluarAlokasi(models.Model):
         JenisPembayaran,
         on_delete=models.CASCADE,
         related_name='kas_keluar_alokasi_set',
+        blank=True,
+        null=True,
     )
+    kategori_pemasukan_non_siswa = models.CharField(max_length=100, blank=True, null=True)
     nominal = models.IntegerField()
 
     def __str__(self):
-        return f"{self.kas_keluar} -> {self.jenis_pembayaran} ({self.nominal})"
+        sumber = self.jenis_pembayaran or (
+            f"Pemasukan Non-Siswa ({self.kategori_pemasukan_non_siswa})"
+        )
+        return f"{self.kas_keluar} -> {sumber} ({self.nominal})"
 
     class Meta:
         ordering = ['id']
@@ -284,6 +290,17 @@ class KasKeluarAlokasi(models.Model):
             models.UniqueConstraint(
                 fields=['kas_keluar', 'jenis_pembayaran'],
                 name='unique_alokasi_per_jenis_pengeluaran',
+            ),
+            models.UniqueConstraint(
+                fields=['kas_keluar', 'kategori_pemasukan_non_siswa'],
+                name='unique_alokasi_per_kategori_non_siswa',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(jenis_pembayaran__isnull=False, kategori_pemasukan_non_siswa__isnull=True)
+                    | Q(jenis_pembayaran__isnull=True, kategori_pemasukan_non_siswa__isnull=False)
+                ),
+                name='kas_keluar_alokasi_single_source',
             ),
         ]
 

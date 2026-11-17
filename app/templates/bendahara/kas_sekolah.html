@@ -192,6 +192,39 @@
         </div>
     </div>
 
+    <div class="panel-card overflow-hidden rounded-3xl">
+        <div class="px-6 py-5 border-b border-slate-200/80">
+            <h4 class="text-lg font-semibold text-slate-900">Pos Pemasukan Non-Siswa per Kategori</h4>
+            <p class="text-sm text-slate-500">Pemasukan dan pengeluaran yang dialokasikan ke kategori non-siswa ditampilkan terpisah dari dana jenis pembayaran.</p>
+        </div>
+        <div class="overflow-x-auto data-table">
+            <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50/80">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600">Kategori</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600">Pemasukan</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600">Dialokasikan</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600">Sisa Dana</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 bg-white">
+                    {% for row in pemasukan_non_siswa_alokasi_rows %}
+                        <tr>
+                            <td class="px-6 py-4 text-sm font-semibold text-slate-900">{{ row.kategori }}</td>
+                            <td class="px-6 py-4 text-sm font-semibold text-emerald-700">Rp {{ row.masuk|intcomma }}</td>
+                            <td class="px-6 py-4 text-sm font-semibold text-red-700">Rp {{ row.keluar|intcomma }}</td>
+                            <td class="px-6 py-4 text-sm font-semibold {% if row.saldo >= 0 %}text-blue-700{% else %}text-red-700{% endif %}">Rp {{ row.saldo|intcomma }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="4" class="px-6 py-8 text-center text-slate-500">Belum ada pemasukan atau alokasi dana non-siswa untuk semester ini.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <div class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <div class="panel-card rounded-3xl p-6">
             <div class="flex items-start justify-between gap-4">
@@ -240,8 +273,8 @@
                     <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                         <div>
                             <div class="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Alokasi Dana</div>
-                            <h5 class="mt-2 text-base font-semibold text-slate-900">Bagi pengeluaran ke satu atau beberapa jenis pembayaran</h5>
-                            <p class="mt-2 text-sm text-slate-500">Kosongkan bagian ini jika pengeluaran bersifat umum dan tidak mengambil dana dari pos pembayaran tertentu.</p>
+                            <h5 class="mt-2 text-base font-semibold text-slate-900">Bagi pengeluaran ke satu atau beberapa sumber dana</h5>
+                            <p class="mt-2 text-sm text-slate-500">Jenis pembayaran dan kategori pemasukan non-siswa yang sudah dicatat tersedia sebagai sumber alokasi. Kosongkan jika pengeluaran bersifat umum.</p>
                         </div>
                         <button type="button" id="addAllocationRow" class="inline-flex items-center justify-center px-4 py-2 rounded-2xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-semibold">
                             Tambah Alokasi
@@ -252,11 +285,11 @@
                         {% for row in allocation_form_rows %}
                             <div class="allocation-row grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto] items-start">
                                 <div>
-                                    <label class="block text-sm font-medium text-slate-700 mb-2">Jenis Pembayaran</label>
-                                    <select name="alokasi_jenis" class="allocation-select w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white">
-                                        <option value="">Pilih jenis pembayaran</option>
-                                        {% for jenis in available_allocation_jenis %}
-                                            <option value="{{ jenis.id }}" {% if row.jenis_id == jenis.id|stringformat:"s" %}selected{% endif %}>{{ jenis.nama }}</option>
+                                    <label class="block text-sm font-medium text-slate-700 mb-2">Sumber Dana</label>
+                                    <select name="alokasi_sumber" class="allocation-select w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white">
+                                        <option value="">Pilih sumber dana</option>
+                                        {% for source in available_allocation_sources %}
+                                            <option value="{{ source.value }}" {% if row.source_value == source.value %}selected{% endif %}>{{ source.label }}</option>
                                         {% endfor %}
                                     </select>
                                 </div>
@@ -447,7 +480,7 @@
             return;
         }
 
-        const optionHtml = `{% for jenis in available_allocation_jenis %}<option value="{{ jenis.id }}">{{ jenis.nama }}</option>{% endfor %}`;
+        const optionHtml = allocationRows.querySelector('.allocation-select').innerHTML;
         const formatRupiah = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
         const parseNumericValue = (value) => {
             const digits = `${value || ''}`.replace(/\D/g, '');
@@ -459,9 +492,8 @@
             wrapper.className = 'allocation-row grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto] items-start';
             wrapper.innerHTML = `
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-2">Jenis Pembayaran</label>
-                    <select name="alokasi_jenis" class="allocation-select w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white">
-                        <option value="">Pilih jenis pembayaran</option>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Sumber Dana</label>
+                    <select name="alokasi_sumber" class="allocation-select w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white">
                         ${optionHtml}
                     </select>
                 </div>
@@ -475,6 +507,10 @@
                     </button>
                 </div>
             `;
+            const sourceSelect = wrapper.querySelector('.allocation-select');
+            sourceSelect.innerHTML = optionHtml;
+            sourceSelect.selectedIndex = 0;
+            Array.from(sourceSelect.options).forEach((option) => option.removeAttribute('selected'));
             const currencyInput = wrapper.querySelector('[data-currency-input="true"]');
             if (currencyInput && typeof window.enhanceCurrencyInput === 'function') {
                 window.enhanceCurrencyInput(currencyInput);
@@ -484,7 +520,7 @@
 
         const getAllocationState = () => {
             const rows = Array.from(allocationRows.querySelectorAll('.allocation-row'));
-            const usedTypes = new Set();
+            const usedSources = new Set();
             let target = parseNumericValue(amountInput.value || 0);
             let used = 0;
             let hasPartial = false;
@@ -492,19 +528,19 @@
             let hasAnyAllocation = false;
 
             rows.forEach((row) => {
-                const jenis = row.querySelector('select[name="alokasi_jenis"]')?.value || '';
+                const source = row.querySelector('select[name="alokasi_sumber"]')?.value || '';
                 const nominal = row.querySelector('.allocation-nominal')?.value || '';
-                if (jenis || nominal) {
+                if (source || nominal) {
                     hasAnyAllocation = true;
                 }
-                if ((jenis && !nominal) || (!jenis && nominal)) {
+                if ((source && !nominal) || (!source && nominal)) {
                     hasPartial = true;
                 }
-                if (jenis) {
-                    if (usedTypes.has(jenis)) {
+                if (source) {
+                    if (usedSources.has(source)) {
                         hasDuplicate = true;
                     }
-                    usedTypes.add(jenis);
+                    usedSources.add(source);
                 }
                 used += parseNumericValue(nominal || 0);
             });
@@ -535,13 +571,13 @@
             }
 
             if (state.hasPartial) {
-                helpText.textContent = 'Masih ada baris alokasi yang belum lengkap. Isi jenis dan nominalnya sekaligus.';
+                helpText.textContent = 'Masih ada baris alokasi yang belum lengkap. Isi sumber dana dan nominalnya sekaligus.';
                 helpText.className = 'mt-3 text-xs text-rose-600';
                 return;
             }
 
             if (state.hasDuplicate) {
-                helpText.textContent = 'Jenis pembayaran yang sama tidak perlu diulang. Gabungkan nominalnya dalam satu baris.';
+                helpText.textContent = 'Sumber dana yang sama tidak perlu diulang. Gabungkan nominalnya dalam satu baris.';
                 helpText.className = 'mt-3 text-xs text-rose-600';
                 return;
             }
@@ -569,7 +605,7 @@
 
             const rows = allocationRows.querySelectorAll('.allocation-row');
             if (rows.length === 1) {
-                rows[0].querySelector('select[name="alokasi_jenis"]').value = '';
+                rows[0].querySelector('select[name="alokasi_sumber"]').value = '';
                 rows[0].querySelector('.allocation-nominal').value = '';
                 rows[0].querySelector('.allocation-nominal').dispatchEvent(new Event('change', { bubbles: true }));
                 updateAllocationSummary();

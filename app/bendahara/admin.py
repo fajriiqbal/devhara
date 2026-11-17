@@ -71,9 +71,14 @@ class KasKeluarAdmin(admin.ModelAdmin):
 
 @admin.register(KasKeluarAlokasi)
 class KasKeluarAlokasiAdmin(admin.ModelAdmin):
-    list_display = ('kas_keluar', 'jenis_pembayaran', 'nominal')
-    list_filter = ('jenis_pembayaran',)
-    search_fields = ('kas_keluar__kode_pengeluaran', 'kas_keluar__judul', 'jenis_pembayaran__nama')
+    list_display = ('kas_keluar', 'jenis_pembayaran', 'kategori_pemasukan_non_siswa', 'nominal')
+    list_filter = ('jenis_pembayaran', 'kategori_pemasukan_non_siswa')
+    search_fields = (
+        'kas_keluar__kode_pengeluaran',
+        'kas_keluar__judul',
+        'jenis_pembayaran__nama',
+        'kategori_pemasukan_non_siswa',
+    )
 
 
 @admin.register(PemasukanNonSiswa)

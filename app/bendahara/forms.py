@@ -325,6 +325,49 @@ class KasKeluarForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         active_semester = Semester.objects.filter(aktif=True).first()
         self.available_jenis_queryset = JenisPembayaran.objects.filter(aktif=True).order_by('nama')
+        semester_id = (
+            self.data.get('semester')
+            if self.is_bound
+            else self.instance.semester_id or (active_semester.pk if active_semester else None)
+        )
+        try:
+            semester_id = int(semester_id) if semester_id else None
+        except (TypeError, ValueError):
+            semester_id = None
+        category_queryset = (
+            PemasukanNonSiswa.objects.exclude(kategori='')
+            .order_by('kategori')
+            .values_list('kategori', flat=True)
+            .distinct()
+        )
+        if semester_id:
+            category_queryset = category_queryset.filter(semester_id=semester_id)
+        self.available_non_student_categories = list(category_queryset)
+        if self.instance.pk and (
+            not self.is_bound or semester_id == self.instance.semester_id
+        ):
+            saved_categories = self.instance.alokasi_set.filter(
+                jenis_pembayaran__isnull=True,
+            ).exclude(
+                kategori_pemasukan_non_siswa='',
+            ).values_list('kategori_pemasukan_non_siswa', flat=True)
+            self.available_non_student_categories = sorted(
+                set(self.available_non_student_categories).union(saved_categories),
+                key=str.casefold,
+            )
+        self.available_allocation_sources = [
+            {
+                'value': f'jenis:{jenis.pk}',
+                'label': f'Jenis Pembayaran - {jenis.nama}',
+            }
+            for jenis in self.available_jenis_queryset
+        ] + [
+            {
+                'value': f'non_siswa:{category}',
+                'label': f'Pemasukan Non-Siswa - {category}',
+            }
+            for category in self.available_non_student_categories
+        ]
         self.fields['judul'].widget.attrs.update({
             'placeholder': 'Contoh: Belanja ATK semester genap',
         })
@@ -362,20 +405,24 @@ class KasKeluarForm(forms.ModelForm):
 
     def get_allocation_rows(self):
         if self.is_bound:
-            jenis_values = self._get_list_data('alokasi_jenis')
+            source_values = self._get_list_data('alokasi_sumber')
             nominal_values = self._get_list_data('alokasi_nominal')
             rows = []
-            for jenis_value, nominal_value in zip_longest(jenis_values, nominal_values, fillvalue=''):
+            for source_value, nominal_value in zip_longest(source_values, nominal_values, fillvalue=''):
                 rows.append({
-                    'jenis_id': (jenis_value or '').strip(),
+                    'source_value': (source_value or '').strip(),
                     'nominal': (nominal_value or '').strip(),
                 })
-            return rows or [{'jenis_id': '', 'nominal': ''}]
+            return rows or [{'source_value': '', 'nominal': ''}]
 
         if self.instance.pk:
             allocation_rows = [
                 {
-                    'jenis_id': str(item.jenis_pembayaran_id),
+                    'source_value': (
+                        f'jenis:{item.jenis_pembayaran_id}'
+                        if item.jenis_pembayaran_id
+                        else f'non_siswa:{item.kategori_pemasukan_non_siswa}'
+                    ),
                     'nominal': str(item.nominal),
                 }
                 for item in self.instance.alokasi_set.select_related('jenis_pembayaran').all()
@@ -385,11 +432,11 @@ class KasKeluarForm(forms.ModelForm):
 
             if self.instance.jenis_pembayaran_id:
                 return [{
-                    'jenis_id': str(self.instance.jenis_pembayaran_id),
+                    'source_value': f'jenis:{self.instance.jenis_pembayaran_id}',
                     'nominal': str(self.instance.jumlah),
                 }]
 
-        return [{'jenis_id': '', 'nominal': ''}]
+        return [{'source_value': '', 'nominal': ''}]
 
     def clean(self):
         cleaned_data = super().clean()
@@ -397,47 +444,63 @@ class KasKeluarForm(forms.ModelForm):
         if jumlah is None:
             return cleaned_data
 
-        jenis_values = self._get_list_data('alokasi_jenis')
+        source_values = self._get_list_data('alokasi_sumber')
         nominal_values = self._get_list_data('alokasi_nominal')
         jenis_map = {
             str(item.pk): item
             for item in self.available_jenis_queryset
         }
+        category_set = set(self.available_non_student_categories)
         allocation_rows = []
         total_alokasi = 0
-        seen_jenis = set()
+        seen_sources = set()
 
-        for jenis_value, nominal_value in zip_longest(jenis_values, nominal_values, fillvalue=''):
-            jenis_value = (jenis_value or '').strip()
+        for source_value, nominal_value in zip_longest(source_values, nominal_values, fillvalue=''):
+            source_value = (source_value or '').strip()
             nominal_value = (nominal_value or '').strip()
 
-            if not jenis_value and not nominal_value:
+            if not source_value and not nominal_value:
                 continue
 
-            if not jenis_value:
-                raise forms.ValidationError('Pilih jenis pembayaran untuk setiap baris alokasi yang diisi.')
+            if not source_value:
+                raise forms.ValidationError('Pilih sumber dana untuk setiap baris alokasi yang diisi.')
 
-            jenis = jenis_map.get(jenis_value)
-            if jenis is None:
-                raise forms.ValidationError('Jenis pembayaran pada alokasi tidak valid.')
+            if source_value.startswith('jenis:'):
+                jenis = jenis_map.get(source_value.partition(':')[2])
+                if jenis is None:
+                    raise forms.ValidationError('Jenis pembayaran pada alokasi tidak valid.')
+                category = ''
+                source_label = jenis.nama
+                source_key = ('jenis', jenis.pk)
+            elif source_value.startswith('non_siswa:'):
+                jenis = None
+                category = source_value.partition(':')[2].strip()
+                if category not in category_set:
+                    raise forms.ValidationError('Kategori pemasukan non-siswa pada alokasi tidak valid.')
+                source_label = f'Pemasukan Non-Siswa ({category})'
+                source_key = ('non_siswa', category)
+            else:
+                raise forms.ValidationError('Sumber dana pada alokasi tidak valid.')
 
-            if jenis.pk in seen_jenis:
-                raise forms.ValidationError(f'Alokasi untuk {jenis.nama} cukup dibuat satu baris saja.')
-            seen_jenis.add(jenis.pk)
+            if source_key in seen_sources:
+                raise forms.ValidationError(f'Alokasi untuk {source_label} cukup dibuat satu baris saja.')
+            seen_sources.add(source_key)
 
             if not nominal_value:
-                raise forms.ValidationError(f'Nominal alokasi untuk {jenis.nama} wajib diisi.')
+                raise forms.ValidationError(f'Nominal alokasi untuk {source_label} wajib diisi.')
 
             try:
                 nominal = int(nominal_value)
             except ValueError:
-                raise forms.ValidationError(f'Nominal alokasi untuk {jenis.nama} harus berupa angka.')
+                raise forms.ValidationError(f'Nominal alokasi untuk {source_label} harus berupa angka.')
 
             if nominal <= 0:
-                raise forms.ValidationError(f'Nominal alokasi untuk {jenis.nama} harus lebih dari 0.')
+                raise forms.ValidationError(f'Nominal alokasi untuk {source_label} harus lebih dari 0.')
 
             allocation_rows.append({
                 'jenis': jenis,
+                'kategori_pemasukan_non_siswa': category,
+                'label': source_label,
                 'nominal': nominal,
             })
             total_alokasi += nominal

@@ -560,18 +560,28 @@ def get_kas_keluar_allocation_rows(kas_keluar):
         allocations = list(kas_keluar.alokasi_set.select_related('jenis_pembayaran').all())
 
     if allocations:
-        return [
-            {
-                'jenis': item.jenis_pembayaran,
+        rows = []
+        for item in allocations:
+            category = item.kategori_pemasukan_non_siswa
+            jenis = item.jenis_pembayaran
+            rows.append({
+                'jenis': jenis,
+                'kategori_pemasukan_non_siswa': category,
+                'label': (
+                    jenis.nama
+                    if jenis
+                    else f'Pemasukan Non-Siswa ({category})'
+                ),
                 'nominal': item.nominal,
                 'is_legacy': False,
-            }
-            for item in allocations
-        ]
+            })
+        return rows
 
     if kas_keluar.jenis_pembayaran_id:
         return [{
             'jenis': kas_keluar.jenis_pembayaran,
+            'kategori_pemasukan_non_siswa': '',
+            'label': kas_keluar.jenis_pembayaran.nama,
             'nominal': kas_keluar.jumlah,
             'is_legacy': True,
         }]
@@ -588,7 +598,7 @@ def build_kas_keluar_display_rows(kas_keluar_items):
             'kas_keluar': item,
             'allocation_rows': allocation_rows,
             'allocation_summary': ', '.join(
-                f"{row['jenis'].nama}: {format_rupiah(row['nominal'])}"
+                f"{row['label']}: {format_rupiah(row['nominal'])}"
                 for row in allocation_rows
             ) if allocation_rows else 'Pengeluaran umum / belum dialokasikan',
             'total_alokasi': total_alokasi,
@@ -669,6 +679,8 @@ def build_kas_sekolah_page_context(*, form, selected_semester, editing_item=None
     for item in kas_keluar_rows:
         for allocation in item['allocation_rows']:
             jenis = allocation['jenis']
+            if jenis is None:
+                continue
             if jenis.id not in jenis_summary_map:
                 jenis_summary_map[jenis.id] = {
                     'jenis': jenis,
@@ -679,6 +691,41 @@ def build_kas_sekolah_page_context(*, form, selected_semester, editing_item=None
                     'saldo_dana': 0,
                 }
             jenis_summary_map[jenis.id]['keluar'] += allocation['nominal']
+
+    pemasukan_non_siswa_category_rows = (
+        pemasukan_non_siswa_queryset.exclude(kategori='')
+        .values('kategori')
+        .annotate(total=Coalesce(Sum('jumlah'), 0))
+    )
+    pemasukan_non_siswa_category_map = {
+        row['kategori']: {
+            'kategori': row['kategori'],
+            'masuk': row['total'],
+            'keluar': 0,
+        }
+        for row in pemasukan_non_siswa_category_rows
+    }
+    for item in kas_keluar_rows:
+        for allocation in item['allocation_rows']:
+            category = allocation['kategori_pemasukan_non_siswa']
+            if not category:
+                continue
+            if category not in pemasukan_non_siswa_category_map:
+                pemasukan_non_siswa_category_map[category] = {
+                    'kategori': category,
+                    'masuk': 0,
+                    'keluar': 0,
+                }
+            pemasukan_non_siswa_category_map[category]['keluar'] += allocation['nominal']
+
+    pemasukan_non_siswa_alokasi_rows = []
+    for item in pemasukan_non_siswa_category_map.values():
+        item['saldo'] = item['masuk'] - item['keluar']
+        pemasukan_non_siswa_alokasi_rows.append(item)
+    pemasukan_non_siswa_alokasi_rows.sort(
+        key=lambda item: (item['masuk'], item['kategori'].casefold()),
+        reverse=True,
+    )
 
     jenis_keuangan_rows = []
     for item in jenis_summary_map.values():
@@ -703,7 +750,8 @@ def build_kas_sekolah_page_context(*, form, selected_semester, editing_item=None
         'form': form,
         'editing_item': editing_item,
         'allocation_form_rows': form.get_allocation_rows(),
-        'available_allocation_jenis': list(form.available_jenis_queryset),
+        'available_allocation_sources': form.available_allocation_sources,
+        'available_allocation_non_student_categories': form.available_non_student_categories,
         'semester_list': semester_list,
         'current_semester': selected_semester,
         'total_target_masuk': cash_position_filtered['total_target_masuk'],
@@ -725,6 +773,7 @@ def build_kas_sekolah_page_context(*, form, selected_semester, editing_item=None
         'pembayaran_items': pembayaran_items,
         'kas_keluar_items': kas_keluar_items,
         'kas_keluar_rows': kas_keluar_rows,
+        'pemasukan_non_siswa_alokasi_rows': pemasukan_non_siswa_alokasi_rows,
         'pemasukan_non_siswa_items': pemasukan_non_siswa_items,
         'jumlah_pemasukan_non_siswa': pemasukan_non_siswa_queryset.count(),
         'kategori_summary': kategori_summary[:6],
@@ -1391,6 +1440,7 @@ def kas_sekolah(request):
                         KasKeluarAlokasi(
                             kas_keluar=kas_keluar,
                             jenis_pembayaran=row['jenis'],
+                            kategori_pemasukan_non_siswa=row['kategori_pemasukan_non_siswa'] or None,
                             nominal=row['nominal'],
                         )
                         for row in allocation_rows
@@ -1435,6 +1485,7 @@ def kas_keluar_update(request, pk):
                         KasKeluarAlokasi(
                             kas_keluar=updated_kas_keluar,
                             jenis_pembayaran=row['jenis'],
+                            kategori_pemasukan_non_siswa=row['kategori_pemasukan_non_siswa'] or None,
                             nominal=row['nominal'],
                         )
                         for row in allocation_rows
@@ -3155,7 +3206,7 @@ def build_laporan_jenis_pembayaran_context(request):
 
         for kas_keluar in kas_keluar_queryset:
             for allocation in get_kas_keluar_allocation_rows(kas_keluar):
-                if allocation['jenis'].id != selected_jenis.id:
+                if allocation['jenis'] is None or allocation['jenis'].id != selected_jenis.id:
                     continue
                 total_pengeluaran += allocation['nominal']
                 alokasi_items.append({
